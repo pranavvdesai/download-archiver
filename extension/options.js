@@ -14,17 +14,18 @@
     }
 
     // Send config to background
-    chrome.runtime.sendMessage({
-      type: 'CONFIG',
-      email,
-      spaceDid: stored.spaceDid || null
-    }, resp => {
-      if (resp?.ok) {
-        chrome.storage.local.set({ email, spaceDid: resp.spaceDid });
-        statusDiv.textContent = 'Configuration saved and connected!';
-      } else {
-        statusDiv.textContent = 'Failed to configure. Check console.';
-      }
-    });
+    chrome.runtime.sendMessage(
+  { type: 'CONFIG', email, spaceDid: stored.spaceDid || null },
+  resp => {
+    if (resp?.ok) {
+      chrome.storage.local.set({ email, spaceDid: resp.spaceDid });
+      statusDiv.textContent = 'Configuration saved and connected!';
+    } else {
+      statusDiv.textContent = 'Failed to configure: ' + (resp.error || 'unknown');
+      console.error('CONFIG error:', resp.error);
+    }
+  }
+);
+
   });
 })();
