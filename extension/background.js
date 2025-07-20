@@ -60,10 +60,10 @@ async function initClient(email) {
   console.log("[DownloadArchiver] Space created with DID:", spaceDid);
 
   console.log("[DownloadArchiver] Setting current space…");
-  await client.setCurrentSpace(spaceDid);
+  await client.setCurrentSpace(space.did());
   console.log("[DownloadArchiver] Current space set.");
 
-  const agentDid = client.did();
+  const agentDid = client.agent.did();
   console.log("[DownloadArchiver] Creating delegation for agent DID:", agentDid);
 
   const delegation = await client.createDelegation(
@@ -72,7 +72,9 @@ async function initClient(email) {
       "space/blob/add",
       "space/index/add",
       "upload/add",
-      "filecoin/offer"
+      "store/add",
+      "store/list",
+      "store/get"
     ],
     { expiration: Infinity }
   );
@@ -90,8 +92,8 @@ if (!proof) {
 await client.setCurrentSpace(sharedSpace.did())
 
 
-  console.log("[DownloadArchiver] Persisting config to storage…");
-  await chrome.storage.local.set({ email, spaceDid });
+//   console.log("[DownloadArchiver] Persisting config to storage…");
+  await chrome.storage.local.set({ email, spaceDid : space.did() });
   console.log("[DownloadArchiver] Configuration saved.");
 
   return spaceDid;
