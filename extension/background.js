@@ -7,6 +7,22 @@ import * as Delegation from '@ucanto/core/delegation'
 let client;
 let spaceDid;
 
+let uploadRules = { types: [], maxSize: Infinity, folders: [] };
+
+chrome.storage.local.get('rules').then(r => {
+  if (r.rules) {
+    uploadRules = r.rules;
+    console.log('[DownloadArchiver] Initial rules:', uploadRules);
+  }
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.rules) {
+    uploadRules = changes.rules.newValue;
+    console.log('[DownloadArchiver] Rules updated:', uploadRules);
+  }
+});
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.runtime.openOptionsPage();
 });
@@ -128,51 +144,54 @@ async function ensureClientReady() {
 
 }
 
-chrome.downloads.onChanged.addListener(async (delta) => {
-  console.log("[DownloadArchiver] download.onChanged event:", delta);
-  if (delta.state?.current === "complete") {
-    console.log("[DownloadArchiver] Download complete, ID =", delta.id);
-    try {
-     await ensureClientReady();
-      console.log("[DownloadArchiver] Client ready, proceeding to fetch item", client);
+chrome.downloads.onChanged.addListener(async delta => {
+  console.log('[DownloadArchiver] download.onChanged:', delta);
+  if (delta.state?.current !== 'complete') {
+    console.log('[DownloadArchiver] Not complete, skipping');
+    return;
+  }
+  console.log('[DownloadArchiver] Download complete, ID=', delta.id);
 
-      const [item] = await chrome.downloads.search({ id: delta.id });
-      console.log("[DownloadArchiver] Download item:", item);
-      if (!item || item.byExtension) {
-        console.log("[DownloadArchiver] Skipping (no item or byExtension)");
-        return;
-      }
+  try {
+    await ensureClientReady();
 
-      console.log("[DownloadArchiver] Fetching blob from URL:", item.url);
-      const response = await fetch(item.url);
-      console.log("[DownloadArchiver] Fetch status:", response.status);
-      const blob = await response.blob();
-      console.log("[DownloadArchiver] Blob size:", blob.size);
-
-      const file = new File([blob], item.filename);
-      console.log("[DownloadArchiver] Created File object:", file);
-
-      console.log("[DownloadArchiver] Uploading file to Storacha:", item.filename);
-      const cid = await client.uploadFile(file);
-      console.log("[DownloadArchiver] uploadFile() returned CID:", cid);
-
-      console.log("cid to string:", cid.toString());
-
-      console.log(
-        `[DownloadArchiver] File uploaded successfully: ${item.filename} → https://${cid}.ipfs.w3s.link`
-      )
-
-      chrome.notifications.create({
-        type: "basic",
-        title: "DownloadArchiver",
-        iconUrl: chrome.runtime.getURL('icons/48.png'),
-        message: `${item.filename} → https://${cid}.ipfs.w3s.link`,
-      });
-      console.log("[DownloadArchiver] Notification sent");
-    } catch (err) {
-      console.error("[DownloadArchiver] Error uploading download:", err);
+    const [item] = await chrome.downloads.search({ id: delta.id });
+    if (!item || item.byExtension) {
+      console.log('[DownloadArchiver] Skipping byExtension or missing item');
+      return;
     }
-  } else {
-    console.log("[DownloadArchiver] download.onChanged event not 'complete', skipping");
+
+    const ext = item.filename.split('.').pop().toLowerCase();
+    if (uploadRules.types.length && !uploadRules.types.includes(ext)) {
+      console.log('[DownloadArchiver] Skipped by type rule:', ext);
+      return;
+    }
+    if (item.fileSize && item.fileSize > uploadRules.maxSize * 1024 * 1024) {
+      console.log('[DownloadArchiver] Skipped by size rule:', item.fileSize);
+      return;
+    }
+    if (uploadRules.folders.length && !uploadRules.folders.some(f => item.filename.includes(f))) {
+      console.log('[DownloadArchiver] Skipped by folder rule:', item.filename);
+      return;
+    }
+
+    const response = await fetch(item.url);
+    const blob = await response.blob();
+    const file = new File([blob], item.filename);
+
+    console.log('[DownloadArchiver] Uploading:', item.filename);
+    const cid = await client.uploadFile(file);
+    console.log('[DownloadArchiver] File uploaded →', `${cid}.ipfs.w3s.link`);
+
+    chrome.notifications.create({
+      type:    'basic',
+      title:   'DownloadArchiver',
+      iconUrl: chrome.runtime.getURL('icons/48.png'),
+      message: `${item.filename} → https://${cid}.ipfs.w3s.link`
+    });
+    console.log('[DownloadArchiver] Notification sent');
+
+  } catch (err) {
+    console.error('[DownloadArchiver] Error uploading download:', err);
   }
 });
