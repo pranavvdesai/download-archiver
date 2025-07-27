@@ -138,6 +138,7 @@ chrome.downloads.onChanged.addListener(async (delta) => {
     console.log("[DownloadArchiver] Uploading:", item.filename);
     const cid = await client.uploadFile(file);
     console.log("[DownloadArchiver] Uploaded →", cid.toString());
+    console.log('[DownloadArchiver] File uploaded →', `https://${cid}.ipfs.w3s.link`);
 
     chrome.notifications.create({
       type: "basic",
